@@ -34,11 +34,10 @@ def run_classifier(training_file, test_file):
 
 		## Evaluate Classifier with Training Data File ##
 
-		tr_true_pos = 0
-		tr_false_neg = 0
-		tr_false_pos = 0
-		tr_true_neg = 0
-		tr_hit_rate = 0.0
+		tr_true_pos = 0.0
+		tr_false_neg = 0.0
+		tr_false_pos = 0.0
+		tr_true_neg = 0.0
 
 		for n in range(len(rows)):
 			r = rows[n]
@@ -46,7 +45,6 @@ def run_classifier(training_file, test_file):
 			expected = int(r[0])
 			result = get_complete_decision(total_yes, total_no, formatted, totals, stds)
 			if(result == expected):
-				tr_hit_rate = tr_hit_rate + 1
 				if(expected == 1):
 					tr_true_pos = tr_true_pos + 1
 				else:
@@ -58,19 +56,18 @@ def run_classifier(training_file, test_file):
 					tr_false_pos = tr_false_pos + 1
 
 
-		tr_hit_rate = tr_hit_rate/len(rows)
-		print("Training Success Rate : {0}%").format(int(100*tr_hit_rate), "%")
-		print("{0} {1} {2} {3}").format(tr_true_pos, tr_false_neg, tr_false_pos, tr_true_neg)
+		print_results(training_file, tr_true_pos, tr_false_neg, tr_false_pos, tr_true_neg, total_yes, total_no)
 
 
 		
 		## Evaluate Classifier with Test Data File ##
 
-		test_true_pos = 0
-		test_false_neg = 0
-		test_false_pos = 0
-		test_true_neg = 0
-		test_hit_rate = 0.0
+		test_true_pos = 0.0
+		test_false_neg = 0.0
+		test_false_pos = 0.0
+		test_true_neg = 0.0
+		test_yes = 0
+		test_no = 0
 		with open (test_file) as testfile:
 
 			test_rows = [r.split(' ') for r in testfile.readlines()]
@@ -82,22 +79,38 @@ def run_classifier(training_file, test_file):
 				expected = int(r[0])
 				result = get_complete_decision(total_yes, total_no, formatted, totals, stds)
 				if(result == expected):
-					test_hit_rate = test_hit_rate + 1
 					if(expected == 1):
+						test_yes = test_yes + 1
 						test_true_pos = test_true_pos + 1
 					else:
+						test_no = test_no + 1
 						test_true_neg = test_true_neg + 1
 				else:
 					if(expected == 1):
+						test_yes = test_yes + 1
 						test_false_neg = test_false_neg + 1
 					else:
+						test_no = test_no + 1
 						test_false_pos = test_false_pos + 1
 
 
-			test_hit_rate = test_hit_rate/len(test_rows)
-			print("Test Success Rate : {0}%").format(int(100*test_hit_rate), "%")
-			print("{0} {1} {2} {3}").format(test_true_pos, test_false_neg, test_false_pos, test_true_neg)
+			print_results(test_file, test_true_pos, test_false_neg, test_false_pos, test_true_neg, test_yes, test_no)
 
+
+def print_results(filename, tp, fn, fp, tn, total_yes, total_no):
+	print("{0} {1} {2} {3}").format(int(tp), int(fn), int(fp), int(tn))
+	precision = (tp/(tp + fp))
+	recall = tp/total_yes
+
+	print("\n*** Results for %s *** " %filename)
+	print("{0} {1} {2} {3}").format(int(tp), int(fn), int(fp), int(tn))
+	print("Accuracy: \t %f" % ((tp + tn)/(total_yes + total_no)))
+	print("Error Rate: \t %f" % ((fp + fn)/(total_yes + total_no)))
+	print("Recall: \t %f" % recall)
+	print("Specificity: \t %f" % (tn/total_no))
+	print("Precision: \t %f" % precision)
+	print("F1 Score: \t %f" % (2*precision*recall/(precision + recall)))
+	print("Fb Score (0.5) \t %f" %(((0.5**2) *precision * recall )/((.5**2)*precision + recall) ))
 
 # get complete decision
 # data = [(attr_num, attr_val)...]
@@ -140,8 +153,8 @@ def get_complete_decision(total_yes, total_no, data, totals, stds):
 	s_yes = s_yes/len(data)
 	s_no = s_no/len(data)
 
-	prob_yes = (p_yes * p_xs_given_yes/p_yes_xs)
-	prob_no = (p_no * p_xs_given_no/p_no_xs)
+	prob_yes = (p_yes * p_xs_given_yes)
+	prob_no = (p_no * p_xs_given_no)
 	
 	if(prob_yes > prob_no):
 		return 1
@@ -150,19 +163,23 @@ def get_complete_decision(total_yes, total_no, data, totals, stds):
 
 # get P(x = v|Y) -> x = attr_num, v = attr_val, Y = class_num 
 def single_attr_prob(class_num, attr_num, attr_val, totals, total_yes, total_no, stds):
+
+	# continuous data, use Gaussian
 	if(stds[1][1] != 0.0):
 		my_std = float(stds[class_num][attr_num])
 		my_mean = float(totals[class_num][attr_num][1])/totals[class_num][attr_num][0]
 	
 		return (1/((2*math.pi*(my_std**2))**(0.5))) * math.exp(-1*((attr_val - my_mean)**2)/(2*(my_std**2)))
 
+	## use laplace correction
 	my_occurance = 0
 	if(attr_num in totals[class_num].keys()):
 		my_occurance = totals[class_num][attr_num][1]
 	if(class_num == 1):
-		return my_occurance/(float(total_yes))
+		return (my_occurance + 1)/(float(total_yes) + 1)
 	if(class_num == -1):
-		return my_occurance/(float(total_no))
+		return (my_occurance + 1)/(float(total_no) + 1)
+
 def get_totals(summary):
 	totals = {1:{}, -1:{}}
 	for class_num in (1, -1):
